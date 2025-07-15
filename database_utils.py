@@ -1,154 +1,199 @@
 # database_utils.py
-import sqlite3
+import streamlit as st
+import pyodbc
 from datetime import datetime
 import pandas as pd
 
-DB_FILE = "finance_database.db"
-
+# --- FUNÇÃO DE CONEXÃO COM AZURE SQL ---
 def get_db_connection():
-    """Cria e retorna uma conexão com o banco de dados."""
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    return conn
+    """Cria e retorna uma conexão com o banco de dados Azure SQL."""
+    try:
+        conn = pyodbc.connect(st.secrets['database']['connection_string'])
+        return conn
+    except Exception as e:
+        st.error(f"Erro ao conectar ao banco de dados: {e}")
+        return None
 
+# --- INICIALIZAÇÃO DO BANCO DE DADOS ---
 def init_db():
-    """Inicializa o banco de dados e cria TODAS as tabelas se não existirem."""
+    """Cria as tabelas no Azure SQL se elas não existirem."""
     conn = get_db_connection()
-    cursor = conn.cursor()
-    # Tabela de despesas
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS despesas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            descricao TEXT NOT NULL,
-            valor REAL NOT NULL,
-            categoria TEXT NOT NULL,
-            data DATE NOT NULL,
-            pagador TEXT,
-            split_pessoa1 REAL,
-            split_pessoa2 REAL
-        )
-    """)
-    # Tabela de orçamentos por categoria
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS orcamentos_categoria (
-            categoria TEXT PRIMARY KEY,
-            limite REAL NOT NULL
-        )
-    """)
-    # NOVA TABELA: Configurações gerais do app
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS app_settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        )
-    """)
-    conn.commit()
-    conn.close()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            # Tabela de Despesas com a coluna 'username'
+            cursor.execute("""
+            IF OBJECT_ID('dbo.despesas', 'U') IS NULL
+            CREATE TABLE despesas (
+                id INT IDENTITY(1,1) PRIMARY KEY,
+                username NVARCHAR(255) NOT NULL,
+                descricao NVARCHAR(MAX) NOT NULL,
+                valor FLOAT NOT NULL,
+                categoria NVARCHAR(255) NOT NULL,
+                data DATE NOT NULL,
+                pagador NVARCHAR(255),
+                split_pessoa1 FLOAT,
+                split_pessoa2 FLOAT
+            )
+            """)
+            # Tabela de Orçamentos com a coluna 'username'
+            cursor.execute("""
+            IF OBJECT_ID('dbo.orcamentos_categoria', 'U') IS NULL
+            CREATE TABLE orcamentos_categoria (
+                username NVARCHAR(255) NOT NULL,
+                categoria NVARCHAR(255) NOT NULL,
+                limite FLOAT NOT NULL,
+                PRIMARY KEY (username, categoria)
+            )
+            """)
+            # Tabela de Configurações com a coluna 'username'
+            cursor.execute("""
+            IF OBJECT_ID('dbo.app_settings', 'U') IS NULL
+            CREATE TABLE app_settings (
+                username NVARCHAR(255) NOT NULL,
+                key NVARCHAR(255) NOT NULL,
+                value NVARCHAR(MAX) NOT NULL,
+                PRIMARY KEY (username, key)
+            )
+            """)
+            conn.commit()
+        except Exception as e:
+            st.error(f"Erro ao inicializar tabelas: {e}")
+        finally:
+            conn.close()
 
-# --- Funções para Configurações Gerais (NOVO) ---
+# --- FUNÇÕES ATUALIZADAS PARA MULTIUSUÁRIO ---
 
-def save_setting(key, value):
-    """Salva ou atualiza uma configuração específica no banco."""
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO app_settings (key, value) VALUES (?, ?)
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value
-        """, (key, value))
-        conn.commit()
-        conn.close()
-        return True
-    except Exception as e:
-        print(f"Erro ao salvar configuração: {e}")
-        return False
-
-def load_setting(key, default_value=None):
-    """Carrega uma configuração específica do banco."""
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT value FROM app_settings WHERE key = ?", (key,))
-        result = cursor.fetchone()
-        conn.close()
-        return result['value'] if result else default_value
-    except Exception as e:
-        print(f"Erro ao carregar configuração: {e}")
-        return default_value
-
-# --- Funções para a tabela de despesas e orçamentos (sem alterações) ---
-
-def add_expense(descricao, valor, categoria, data_str=None, pagador=None, split_p1=None, split_p2=None):
+def add_expense(username, descricao, valor, categoria, data_str=None, pagador=None, split_p1=None, split_p2=None):
     if data_str is None:
         data_str = datetime.now().strftime("%Y-%m-%d")
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO despesas (descricao, valor, categoria, data, pagador, split_pessoa1, split_pessoa2) VALUES (?, ?, ?, ?, ?, ?, ?)", (descricao, float(valor), categoria, data_str, pagador, split_p1, split_p2))
-        conn.commit()
-        conn.close()
-        return True, f"Despesa '{descricao}' de R${valor} adicionada."
-    except Exception as e:
-        return False, f"Ocorreu um erro ao adicionar a despesa: {e}"
+    sql = """
+    INSERT INTO despesas (username, descricao, valor, categoria, data, pagador, split_pessoa1, split_pessoa2)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute(sql, username, descricao, float(valor), categoria, data_str, pagador, split_p1, split_p2)
+            conn.commit()
+            return True, f"Despesa '{descricao}' adicionada."
+        except Exception as e:
+            return False, f"Erro ao adicionar despesa: {e}"
+        finally:
+            conn.close()
+    return False, "Falha na conexão com o banco."
 
-def get_monthly_expenses(year_month=None):
+def get_monthly_expenses(username, year_month=None):
     if year_month is None:
         year_month = datetime.now().strftime("%Y-%m")
-    try:
-        conn = get_db_connection()
-        query = "SELECT id, descricao, valor, categoria, data, pagador, split_pessoa1, split_pessoa2 FROM despesas WHERE strftime('%Y-%m', data) = ? ORDER BY data DESC"
-        df = pd.read_sql_query(query, conn, params=(year_month,))
-        conn.close()
-        if df.empty:
-            return pd.DataFrame(columns=['id', 'Descrição', 'Valor', 'Categoria', 'Data', 'Pagador', 'Split Pessoa 1', 'Split Pessoa 2']), 0.0
-        df.columns = ['id', 'Descrição', 'Valor', 'Categoria', 'Data', 'Pagador', 'Split Pessoa 1', 'Split Pessoa 2']
-        total = df['Valor'].sum()
-        return df, total
-    except Exception as e:
-        return pd.DataFrame(), 0.0
+    
+    # FORMAT(data, 'yyyy-MM') é a forma T-SQL de formatar a data
+    sql = "SELECT * FROM despesas WHERE username = ? AND FORMAT(data, 'yyyy-MM') = ? ORDER BY data DESC"
+    
+    conn = get_db_connection()
+    if conn:
+        try:
+            df = pd.read_sql(sql, conn, params=[username, year_month])
+            df.columns = ['id', 'username', 'Descrição', 'Valor', 'Categoria', 'Data', 'Pagador', 'Split Pessoa 1', 'Split Pessoa 2']
+            total = df['Valor'].sum()
+            return df, total
+        except Exception as e:
+            st.error(f"Erro ao buscar despesas: {e}")
+        finally:
+            conn.close()
+            
+    empty_df = pd.DataFrame(columns=['id', 'username', 'Descrição', 'Valor', 'Categoria', 'Data', 'Pagador', 'Split Pessoa 1', 'Split Pessoa 2'])
+    return empty_df, 0.0
 
-def get_distinct_months():
-    try:
-        conn = get_db_connection()
-        query = "SELECT DISTINCT strftime('%Y-%m', data) as month FROM despesas ORDER BY month DESC"
-        df = pd.read_sql_query(query, conn)
-        conn.close()
-        return df['month'].tolist()
-    except Exception as e:
-        return []
 
-def delete_expense(expense_id):
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM despesas WHERE id = ?", (expense_id,))
-        conn.commit()
-        conn.close()
-        return True
-    except Exception as e:
-        return False
+def delete_expense(username, expense_id):
+    """Deleta uma despesa apenas se o ID e o username corresponderem."""
+    sql = "DELETE FROM despesas WHERE id = ? AND username = ?"
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute(sql, expense_id, username)
+            conn.commit()
+            return cursor.rowcount > 0 # Retorna True se uma linha foi deletada
+        finally:
+            conn.close()
+    return False
 
-def save_category_budgets(budgets_dict):
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.executemany("INSERT INTO orcamentos_categoria (categoria, limite) VALUES (?, ?) ON CONFLICT(categoria) DO UPDATE SET limite = excluded.limite", budgets_dict.items())
-        conn.commit()
-        conn.close()
-        return True
-    except Exception as e:
-        return False
+def save_category_budgets(username, budgets_dict):
+    """Usa a declaração MERGE do SQL Server para fazer o 'UPSERT'."""
+    sql = """
+    MERGE orcamentos_categoria AS target
+    USING (VALUES (?, ?, ?)) AS source (username, categoria, limite)
+    ON (target.username = source.username AND target.categoria = source.categoria)
+    WHEN MATCHED THEN
+        UPDATE SET limite = source.limite
+    WHEN NOT MATCHED THEN
+        INSERT (username, categoria, limite) VALUES (source.username, source.categoria, source.limite);
+    """
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            for categoria, limite in budgets_dict.items():
+                cursor.execute(sql, username, categoria, limite)
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+    return False
 
-def load_category_budgets(categories):
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT categoria, limite FROM orcamentos_categoria")
-        budgets = {row['categoria']: row['limite'] for row in cursor.fetchall()}
-        conn.close()
-        for cat in categories:
-            if cat not in budgets:
-                budgets[cat] = 0.0
-        return budgets
-    except Exception as e:
-        return {cat: 0.0 for cat in categories}
+
+def load_category_budgets(username, categories):
+    sql = "SELECT categoria, limite FROM orcamentos_categoria WHERE username = ?"
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute(sql, username)
+            budgets = {row.categoria: row.limite for row in cursor.fetchall()}
+            for cat in categories:
+                if cat not in budgets:
+                    budgets[cat] = 0.0
+            return budgets
+        finally:
+            conn.close()
+    return {cat: 0.0 for cat in categories}
+
+
+def save_setting(username, key, value):
+    sql = """
+    MERGE app_settings AS target
+    USING (VALUES (?, ?, ?)) AS source (username, key, value)
+    ON (target.username = source.username AND target.key = source.key)
+    WHEN MATCHED THEN
+        UPDATE SET value = source.value
+    WHEN NOT MATCHED THEN
+        INSERT (username, key, value) VALUES (source.username, source.key, source.value);
+    """
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute(sql, username, key, str(value))
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+    return False
+
+def load_setting(username, key, default_value=None):
+    sql = "SELECT value FROM app_settings WHERE username = ? AND key = ?"
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute(sql, username, key)
+            result = cursor.fetchone()
+            return result.value if result else default_value
+        finally:
+            conn.close()
+    return default_value
+
+# (A função get_distinct_months também precisaria ser atualizada com 'WHERE username = ?')

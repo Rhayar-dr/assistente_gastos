@@ -3,3 +3,7 @@ openai
 pandas
 plotly
 streamlit-mic-recorder
+pyodbc # Para conectar com Azure SQL
+streamlit-authenticator
+pyyaml
+pydantic

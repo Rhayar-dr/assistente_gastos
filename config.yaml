@@ -1,0 +1,20 @@
+# config.yaml
+credentials:
+  usernames:
+    # Usuário para o primeiro casal/pessoa
+    jsmith:
+      email: rhayar@gmail.com
+      name: rhayar teste
+      password: '$2b$12$Gq8.XhDyShfdwWVMpZx9G.D5clLCP8omOnkiV0eLxEwDeRmvwsrfu' # Substitua pela senha hasheada
+    # Usuário para o segundo casal/pessoa
+    rbriggs:
+      email: rebeca@gmail.com
+      name: Rebeca teste
+      password: '2b$12$yOWDWNxBSFBn48tuHpIcn.CRxPsOGZSEMyrRICa1.eoD7lK8hARIO' # Substitua pela senha hasheada
+cookie:
+  expiry_days: 30
+  key: 'some_random_signature_key' # Chave secreta aleatória
+  name: 'some_cookie_name'
+preauthorized:
+  emails:
+  - melsby@gmail.com
