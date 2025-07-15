@@ -107,7 +107,7 @@ if st.session_state["authentication_status"]:
         if app_mode != saved_app_mode:
             database_utils.save_setting(username, 'app_mode', app_mode)
             st.cache_data.clear()
-            st.rerun()
+            #st.rerun()
         if app_mode == "Casal":
             st.subheader("Nomes do Casal")
             p1 = database_utils.load_setting(username, 'person1_name', 'Pessoa 1')
