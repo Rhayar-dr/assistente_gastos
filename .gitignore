@@ -55,6 +55,10 @@ cover/
 *.mo
 *.pot
 
+# Ignorar arquivos de configuração com segredos
+config.yaml
+./streamlit
+
 # Django stuff:
 *.log
 local_settings.py
