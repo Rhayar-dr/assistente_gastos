@@ -1,9 +1,10 @@
+# requirements.txt
 streamlit
 openai
 pandas
 plotly
-streamlit-mic-recorder
-pyodbc # Para conectar com Azure SQL
-streamlit-authenticator
+streamlit-authenticator==0.3.2
 pyyaml
 pydantic
+psycopg2-binary
+sqlalchemy # Nova biblioteca
