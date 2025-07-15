@@ -13,7 +13,7 @@ import openai_utils
 
 # --- CONFIGURAÇÃO DA PÁGINA E INICIALIZAÇÃO DO BANCO ---
 st.set_page_config(page_title="Agente Financeiro", layout="wide")
-CATEGORIES = ["Diversão", "Moradia", "Carro", "Supermercado", "Saúde", "Contas", "Educação", "Outros"]
+CATEGORIES = ["Diversão", "Alguel/Condomínio", "Carro", "Supermercado", "Limpeza", "Marmitas","Investimento", "Saúde","Luz/Internet","Outros"]
 database_utils.init_db() 
 
 # --- FUNÇÃO OTIMIZADA PARA CARREGAR CREDENCIAIS COM CACHE ---
