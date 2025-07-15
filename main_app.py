@@ -19,10 +19,6 @@ database_utils.init_db()
 # --- FUNÇÃO OTIMIZADA PARA CARREGAR CREDENCIAIS COM CACHE ---
 @st.cache_data
 def load_credentials():
-    """
-    Busca todos os usuários do banco. O decorator @st.cache_data garante que o banco
-    seja consultado apenas uma vez, ou quando o cache for limpo.
-    """
     users = database_utils.fetch_all_users()
     credentials = {
         "usernames": {
@@ -32,7 +28,6 @@ def load_credentials():
     }
     return credentials
 
-# Carrega as credenciais usando a função cacheada
 credentials = load_credentials()
 
 # --- LÓGICA DE AUTENTICAÇÃO (FORA DO CACHE) ---
@@ -82,7 +77,6 @@ if st.session_state["authentication_status"] is False:
 if st.session_state["authentication_status"]:
     
     username = st.session_state["username"]
-
     st.title(f"🤖 Bem-vindo(a), {st.session_state['name']}!")
     
     def processar_gasto(prompt_text, user):
@@ -107,7 +101,7 @@ if st.session_state["authentication_status"]:
         if app_mode != saved_app_mode:
             database_utils.save_setting(username, 'app_mode', app_mode)
             st.cache_data.clear()
-            #st.rerun()
+
         if app_mode == "Casal":
             st.subheader("Nomes do Casal")
             p1 = database_utils.load_setting(username, 'person1_name', 'Pessoa 1')
@@ -117,7 +111,9 @@ if st.session_state["authentication_status"]:
             if st.button("Salvar Nomes", use_container_width=True):
                 database_utils.save_setting(username, 'person1_name', person1_name)
                 database_utils.save_setting(username, 'person2_name', person2_name)
-                st.cache_data.clear(); st.success("Nomes salvos!"); st.rerun()
+                st.cache_data.clear()
+                st.success("Nomes salvos!")
+                # st.rerun() FOI REMOVIDO DAQUI
         else:
             person1_name, person2_name = "Eu", ""
         
@@ -130,13 +126,14 @@ if st.session_state["authentication_status"]:
                 category_budgets[category] = st.number_input(f"{category}", value=saved_budgets.get(category, 0.0), key=f"budget_{category}")
             if st.button("Salvar Limites", use_container_width=True, type="primary"):
                 database_utils.save_category_budgets(username, category_budgets)
-                st.cache_data.clear(); st.success("Limites salvos!")
+                st.cache_data.clear()
+                st.success("Limites salvos!")
+                # GARANTINDO QUE NÃO HÁ st.rerun() AQUI TAMBÉM
 
-    # --- ESTRUTURA DE ABAS ---
     tab1, tab2 = st.tabs(["💬 Registro", "📊 Análise"])
 
     with tab1:
-        col_action, col_chat = st.columns([1, 1.5]) 
+        col_action, col_chat = st.columns([1, 1.5])
         with col_chat:
             st.subheader("Histórico da Conversa")
             with st.container():
@@ -164,12 +161,11 @@ if st.session_state["authentication_status"]:
                             st.cache_data.clear()
                             st.success(msg)
                             del st.session_state.pending_expense
-                            # A LINHA QUE APAGAVA O HISTÓRICO FOI REMOVIDA DAQUI
                             st.rerun()
                         else: st.error(msg)
             else:
                 st.info("Digite um gasto no chat abaixo para que ele seja registrado e apareça aqui para confirmação.")
-
+    
     with tab2:
         st.header("Análise Detalhada")
         current_month_str = datetime.now().strftime("%Y-%m")
