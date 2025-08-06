@@ -1,4 +1,3 @@
-# main_app.py
 import streamlit as st
 from datetime import datetime
 import pandas as pd
@@ -113,7 +112,6 @@ if st.session_state["authentication_status"]:
                 database_utils.save_setting(username, 'person2_name', person2_name)
                 st.cache_data.clear()
                 st.success("Nomes salvos!")
-                # st.rerun() FOI REMOVIDO DAQUI
         else:
             person1_name, person2_name = "Eu", ""
         
@@ -128,7 +126,6 @@ if st.session_state["authentication_status"]:
                 database_utils.save_category_budgets(username, category_budgets)
                 st.cache_data.clear()
                 st.success("Limites salvos!")
-                # GARANTINDO QUE NÃO HÁ st.rerun() AQUI TAMBÉM
 
     tab1, tab2 = st.tabs(["💬 Registro", "📊 Análise"])
 
@@ -176,6 +173,15 @@ if st.session_state["authentication_status"]:
                 st.info("Nenhuma despesa registrada para o mês selecionado.")
             else:
                 st.metric(f"Gasto Total em {selected_month}", f"R$ {total_spent:.2f}")
+
+                # --- Preparação dos dados de análise (movido para cima para reuso) ---
+                category_spending = expenses_df.groupby('Categoria')['Valor'].sum()
+                budget_df = pd.DataFrame(list(category_budgets.items()), columns=['Categoria', 'Orçamento'])
+                analysis_df = budget_df.set_index('Categoria')
+                analysis_df['Gasto'] = category_spending
+                analysis_df = analysis_df.fillna(0).reset_index()
+                analysis_df['Saldo'] = analysis_df['Orçamento'] - analysis_df['Gasto']
+                
                 if app_mode == "Casal" and not expenses_df['Pagador'].isnull().all():
                     st.subheader(f"Contribuições de {person1_name} vs {person2_name}")
                     def calculate_contribution(row, person_name_to_check, split_col):
@@ -189,20 +195,41 @@ if st.session_state["authentication_status"]:
                     contribution_data = pd.DataFrame({'Pessoa': [person1_name, person2_name], 'Valor Pago': [total_p1, total_p2]})
                     fig_contrib = px.pie(contribution_data, names='Pessoa', values='Valor Pago', title='Quem Pagou Mais no Mês', hole=0.4, color_discrete_sequence=px.colors.sequential.RdBu)
                     st.plotly_chart(fig_contrib, use_container_width=True)
+
+                # --- [NOVO] Tabela de Resumo: Gasto vs. Limite ---
+                st.subheader("Resumo: Gasto vs. Limite por Categoria")
+                summary_df = analysis_df.rename(columns={'Gasto': 'Gasto Total', 'Orçamento': 'Limite', 'Saldo': 'Saldo Restante'})
+                st.dataframe(
+                    summary_df[['Categoria', 'Gasto Total', 'Limite', 'Saldo Restante']],
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Gasto Total": st.column_config.NumberColumn(format="R$ %.2f"),
+                        "Limite": st.column_config.NumberColumn(format="R$ %.2f"),
+                        "Saldo Restante": st.column_config.NumberColumn(format="R$ %.2f")
+                    }
+                )
                 
                 st.subheader("Planilha de Despesas")
                 if app_mode == "Casal":
                     display_cols = ['Data', 'Descrição', 'Categoria', 'Valor', 'Pagador', f'Valor {person1_name}', f'Valor {person2_name}']
-                    st.dataframe(expenses_df.reindex(columns=display_cols).fillna(0), use_container_width=True)
+                    st.dataframe(expenses_df.reindex(columns=display_cols).fillna(0), use_container_width=True, hide_index=True)
                 else:
-                    st.dataframe(expenses_df[['Data', 'Descrição', 'Categoria', 'Valor']], use_container_width=True)
+                    st.dataframe(expenses_df[['Data', 'Descrição', 'Categoria', 'Valor']], use_container_width=True, hide_index=True)
                 
                 st.subheader("Análise Gráfica")
                 col_graph1, col_graph2 = st.columns(2)
                 with col_graph1:
-                    st.text("Gastos por Categoria"); category_spending_pie = expenses_df.groupby('Categoria')['Valor'].sum().reset_index(); fig_pie = px.pie(category_spending_pie, names='Categoria', values='Valor', hole=.3); fig_pie.update_traces(textposition='inside', textinfo='percent+label'); st.plotly_chart(fig_pie, use_container_width=True)
+                    st.text("Gastos por Categoria")
+                    fig_pie = px.pie(analysis_df, names='Categoria', values='Gasto', hole=.3)
+                    fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+                    st.plotly_chart(fig_pie, use_container_width=True)
                 with col_graph2:
-                    st.text("Gasto vs. Orçamento por Categoria"); category_spending_bar = expenses_df.groupby('Categoria')['Valor'].sum(); budget_df = pd.DataFrame(list(category_budgets.items()), columns=['Categoria', 'Orçamento']); analysis_df = budget_df.set_index('Categoria'); analysis_df['Gasto'] = category_spending_bar; analysis_df = analysis_df.fillna(0).reset_index(); fig_bar = go.Figure(); fig_bar.add_trace(go.Bar(x=analysis_df['Categoria'], y=analysis_df['Gasto'], name='Gasto Real', marker_color='indianred')); fig_bar.add_trace(go.Scatter(x=analysis_df['Categoria'], y=analysis_df['Orçamento'], name='Orçamento Definido', mode='lines+markers', line=dict(color='royalblue', dash='dash'))); st.plotly_chart(fig_bar, use_container_width=True)
+                    st.text("Gasto vs. Orçamento por Categoria")
+                    fig_bar = go.Figure()
+                    fig_bar.add_trace(go.Bar(x=analysis_df['Categoria'], y=analysis_df['Gasto'], name='Gasto Real', marker_color='indianred'))
+                    fig_bar.add_trace(go.Scatter(x=analysis_df['Categoria'], y=analysis_df['Orçamento'], name='Orçamento Definido', mode='lines+markers', line=dict(color='royalblue', dash='dash')))
+                    st.plotly_chart(fig_bar, use_container_width=True)
                 
                 st.divider()
                 st.subheader("🗑️ Deletar uma Despesa")
