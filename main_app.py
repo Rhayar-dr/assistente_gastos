@@ -45,6 +45,16 @@ if not st.session_state.get("authentication_status"):
 
     with col2:
         st.subheader("Não tem uma conta?")
+        # --- [NOVO] Dica para contas de casal ---
+        st.info(
+            """
+            **Dica para Casais:** Para gerenciar as finanças em conjunto, vocês podem criar uma 
+            única conta compartilhada.
+            
+            Basta usar um nome de usuário e senha que ambos conheçam. O endereço de e-mail não é validado, 
+            então pode ser fictício, facilitando o compartilhamento do acesso.
+            """
+        )
         with st.form("Registration Form"):
             name = st.text_input("Nome Completo", key="reg_name")
             email = st.text_input("Email", key="reg_email")
@@ -196,7 +206,7 @@ if st.session_state["authentication_status"]:
                     fig_contrib = px.pie(contribution_data, names='Pessoa', values='Valor Pago', title='Quem Pagou Mais no Mês', hole=0.4, color_discrete_sequence=px.colors.sequential.RdBu)
                     st.plotly_chart(fig_contrib, use_container_width=True)
 
-                # --- [NOVO] Tabela de Resumo: Gasto vs. Limite ---
+                # --- Tabela de Resumo: Gasto vs. Limite ---
                 st.subheader("Resumo: Gasto vs. Limite por Categoria")
                 summary_df = analysis_df.rename(columns={'Gasto': 'Gasto Total', 'Orçamento': 'Limite', 'Saldo': 'Saldo Restante'})
                 st.dataframe(
